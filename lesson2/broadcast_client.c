@@ -23,6 +23,7 @@ int main()
     perror("socket\n");
     int a = 1;
     setsockopt(socket_udp, SOL_SOCKET, SO_BROADCAST, &a, sizeof(a));      
+    bind(socket_udp, (struct sockaddr *)&server, sizeof(server));
     sendto(socket_udp, buf, buf_size, 0, (struct sockaddr*) &server, sizeof(server));
 
     struct sockaddr_in client;

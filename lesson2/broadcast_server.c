@@ -25,12 +25,11 @@ int main() {
     }
 
     socklen_t client_len = sizeof(client);
-    while (1) {
         int len = recvfrom(socket_udp, buf, buf_size, 0, (struct sockaddr*) &client, &client_len);
         if (len < 0) {
             perror("recvfrom");
             return -1;
-        }
+        
         printf("%s\n", buf);
         printf("Msg from: %d\n", ntohs(client.sin_port));
         sendto(socket_udp, buf, buf_size, 0, (struct sockaddr*) &client, sizeof(client));
