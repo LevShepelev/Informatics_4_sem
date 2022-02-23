@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 int main() {
-    int buf_size = 1000;
+    int buf_size = 1000, a = 1;
     struct sockaddr_in server;
     struct in_addr tmp;
     tmp.s_addr = htonl(INADDR_ANY);
