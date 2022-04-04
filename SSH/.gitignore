@@ -1,0 +1,7 @@
+*.o
+client
+server
+log
+lib_old_vers.h
+old_version_client.c
+old_version.c
