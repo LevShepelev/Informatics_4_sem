@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "stdarg.h": "c",
+        "unistd.h": "c",
+        "stat.h": "c",
+        "old_version_client": "c",
+        "fcntl.h": "c"
+    }
+}

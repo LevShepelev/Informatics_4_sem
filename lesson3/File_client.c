@@ -37,10 +37,13 @@ int main(int argc, char* argv[]) {
     int socket_tcp = socket(AF_INET, SOCK_STREAM, 0);
     perror("socket");
     int reuse = 1;
-    setsockopt(socket_tcp, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(int));
-    perror("setsocketopt");
-    bind(socket_tcp, (struct sockaddr*) &server, sizeof(server));
-    connect(socket_tcp, (struct sockaddr*) &server, sizeof(server));
+    if (setsockopt(socket_tcp, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(int)) < 0) {
+            perror("setsocketopt");
+    }
+
+    if (connect(socket_tcp, (struct sockaddr*) &server, sizeof(server)) < 0) {
+            perror("connect\n");
+    }
     unsigned message_size = statistica.st_size;
 
     send(socket_tcp, (char*) &message_size, sizeof(message_size), 0);
@@ -48,5 +51,6 @@ int main(int argc, char* argv[]) {
     send(socket_tcp, (char*) &message_size, sizeof(message_size), 0);
     send(socket_tcp, buf, statistica.st_size, 0);
     send(socket_tcp, argv[3], strlen(argv[3]), 0);
+    close(socket_tcp);
     return 0;
 }

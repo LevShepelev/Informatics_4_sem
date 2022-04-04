@@ -33,6 +33,7 @@ int main()
             {
             socklen_t client_len = sizeof(client);
             int len = recvfrom(socket_udp, buf, buf_size, 0, (struct sockaddr*) &client, &client_len);
+            sendto(socket_udp, buf, len, 0, (struct sockaddr*) &client, client_len);
             if (len > 0)
                 for (int i = 0; i < len; i++)
                     printf("%c", buf[i]);

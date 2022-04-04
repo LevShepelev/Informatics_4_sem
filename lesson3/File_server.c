@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+
 int main() {
     int max_clients = 100;
     struct sockaddr_in server;
@@ -23,6 +24,7 @@ int main() {
     perror("socket");
     int reuse = 1;
     setsockopt(socket_tcp, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(int));
+    setsockopt(socket_tcp, SOL_SOCKET, SO_REUSEPORT, (const char *)&reuse, sizeof(int));
     perror("setsocketopt");
 
     if (bind(socket_tcp, (struct sockaddr*) &server, sizeof(server)) < 0)
@@ -36,14 +38,7 @@ int main() {
         exit(1);
         }
         socklen_t client_len = sizeof(client);
-    while (1)
-        {
-        for (int i = 0; i < max_clients - 1; i++)
-            {
-            int fork_code = fork();
-            if (fork_code == 0)
-                break;
-            }
+
         int client_fd = accept(socket_tcp, (struct sockaddr*) &client, &client_len);
         perror("accept");
 
@@ -67,5 +62,5 @@ int main() {
             if (write(file_fd, buf, message_size) != message_size)
                 perror("write");
             
-        }
+        close(socket_tcp);
 }

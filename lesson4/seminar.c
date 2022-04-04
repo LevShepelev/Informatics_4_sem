@@ -19,14 +19,17 @@ int main() {
         perror("openpt");
         return 1;
     }
+
     if (grantpt(master)) {
         perror("grantpt");
         return 1;
     }
+
     if (unlockpt(master)) {
         perror("unlockpt");
         return 1;
     }
+
     ret = tcgetattr(master, &t);
     if (ret) {
         perror("tcgetattr");
@@ -34,15 +37,22 @@ int main() {
     }
 
     cfmakeraw(&t);
+    
     ret = tcsetattr(master, TCSANOW, &t);
+    if (ret) {
+		perror("tcsetattr");
+		return 1;
+	}
+
     ret = fork();
     if (ret == 0) {
-        int term;
+
+        setgid(0);
 
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
-        term = open(ptsname(master), O_RDWR);
+        int term = open(ptsname(master), O_RDWR);
         if (term < 0) {
             perror("open slave term");
             exit(1);
@@ -54,40 +64,56 @@ int main() {
         execvp("sh", bash_argv);
     }
 
-    #define LS "ls -la /proc/self/fd\n"
-
-    write(master, LS, sizeof(LS));
-    if (ret != sizeof(LS)) {
-        perror("write");
+    int sz = read(STDIN_FILENO, buf, sizeof(buf));
+    if (sz < 0) {
+        perror("read");
         return 1;
     }
 
-    sleep(3);
+    ret = write(master, buf, strlen(buf));
+    if (ret != strlen(buf)) {
+        perror("write");
+        return 1;
+    }
+    /*#define EXIT "exit\n"
+	ret = write(master, EXIT, strlen(EXIT));
+	if (ret != strlen(EXIT)) {
+		perror("unable to write into master term");
+		return 1;
+	}*/
+    printf("waiting\n");
+    sleep(1);
+    
 
     ret = read(master, buf, sizeof(buf));
     write(STDOUT_FILENO, buf, ret);
-    write(master, "exit", sizeof("exit"));
-    wait(NULL);
-
+    
     while (1) {
         int sz, wr;
-        sz = read(STDIN_FILENO, buf, sizeof(buf));
+        //ret = read(STDIN_FILENO, buf, sizeof(buf));
+        perror("read_sec_mess\n");
+        printf("%s", buf);
+        sleep(3);
+        write(STDOUT_FILENO, "here\n", strlen("here\n"));
         if (sz < 0) {
-            perror("read");
+            perror("read_from_stdin");
             return 1;
         }
-
+        
+        sz = read(STDIN_FILENO, buf, sizeof(buf)); //here crash ?
+        wait(NULL);
         wr = write(master, buf, sz);
         if (wr != sz) {
             perror("unable to write into master term");
             return 1;
         }
+        wait(NULL);
         if (!strncmp(buf, "exit", 4)) 
             break;
         sleep(1);
         sz = read(master, buf, sizeof(buf));
         if (sz < 0) {
-            perror("read");
+            perror("read_form_master");
             return 1;
         }
         
@@ -96,8 +122,15 @@ int main() {
             perror("write stdout");
             return 1;
         }
+    #define EXIT "exit\n"
+        ret = write(master, EXIT, strlen(EXIT));
+        if (ret != strlen(EXIT)) {
+		perror("unable to write into master term");
+		return 1;
+        }
     }
     wait(NULL);
+    write(master, "exit", sizeof("exit"));
     close(master);
     return 0;
 }

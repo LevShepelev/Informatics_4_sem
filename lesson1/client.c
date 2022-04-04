@@ -7,15 +7,16 @@
 #include <unistd.h>
 #include <string.h>
 
-int main()
+int main(int argc, char* argv[])
     {
     int is_udp = 0, buf_size = 1000;
     struct sockaddr_in server;
     struct in_addr tmp;
-    tmp.s_addr = htonl(INADDR_LOOPBACK);
+    inet_aton(argv[1], &tmp);
     server.sin_family = AF_INET;
     server.sin_port   = htons(30000);
     server.sin_addr   = tmp;
+    socklen_t client_len = sizeof(server);
     char* buf = (char*) calloc(buf_size, sizeof(char));
     printf("To use udp press 1, to use tcp press 0\n");
     scanf("%d", &is_udp);
@@ -28,6 +29,8 @@ int main()
             fflush(stdin);
             fgets(buf, buf_size, stdin);
             sendto(socket_udp, buf, buf_size, 0, (struct sockaddr*) &server, sizeof(server));
+            recvfrom(socket_udp, buf, buf_size, 0, (struct sockaddr*) &server, &client_len);
+            write(STDOUT_FILENO, buf, buf_size);
             }
         }
     else if (is_udp == 0)
@@ -37,7 +40,6 @@ int main()
         int reuse = 1;
         setsockopt(socket_tcp, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(int));
         perror("setsocketopt");
-        bind(socket_tcp, (struct sockaddr*) &server, sizeof(server));
         connect(socket_tcp, (struct sockaddr*) &server, sizeof(server));
         while (1)
             {
@@ -45,6 +47,7 @@ int main()
             fgets(buf, buf_size, stdin);
             //printf("%s, %ld", buf, write(socket_tcp, buf, strlen(buf)));
             write(socket_tcp, buf, strlen(buf));
+
             }
         }
     else 
