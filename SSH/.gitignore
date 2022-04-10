@@ -4,4 +4,6 @@ server
 log
 lib_old_vers.h
 old_version_client.c
-old_version.c
+old_version_server.c
+mylib.a
+libmylib.so

@@ -1,6 +1,31 @@
-all:
-	gcc -c -g -O0 client.c ../lesson6/logs.c
-	gcc -c -g -O0 server.c
-	gcc client.o logs.o -o client 
-	gcc server.o logs.o -o server -lpam -lpam_misc
-	
+CC ?= gcc
+CFLAGS ?= -Wall -Werror -g
+ipath = $(realpath include)
+lpath = $(realpath lib)
+slib = $(realpath lib/mylib.a)
+export
+
+all: src
+
+.PHONY: src
+src: lib
+	make -C src
+
+.PHONY: lib
+lib:
+	make -C lib
+
+install: src
+	cp src/server /home/lev/tmp/bin/
+	cp src/client /home/lev/tmp/bin/
+	cp lib/libmylib.so /home/lev/tmp/lib/
+
+uninstall:
+	rm -rf /home/lev/tmp/bin/client
+	rm -rf /home/lev/tmp/bin/server
+	rm -rf /home/lev/tmp/lib/libmylib.so
+
+clean:
+	make clean -C src
+	make clean -C lib
+
