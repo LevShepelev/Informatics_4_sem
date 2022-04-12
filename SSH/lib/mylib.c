@@ -7,7 +7,7 @@ const char NOT_NEED_BIND = 2;
 const char GET_FILE[10] = "get_file";
 const char SEND_FILE[10] = "send_file";
 const char READY_TO_ACCEPT[20] = "ready_to_accept";
-const uint16_t broadcast_port = 29939;
+const uint16_t broadcast_port = 29941;
 const int secret_size = 100;
 
 
@@ -223,6 +223,10 @@ int Encrypt(const char* info, int info_size, char** encrypted_info, FILE* pubKey
 	pubKey = PEM_read_RSAPublicKey(pubKey_file, NULL, NULL, NULL);
 
 	int encrypted_info_size = RSA_size(pubKey);
+    if (info_size - 11 > encrypted_info_size) {
+        log_error("Too big message for encrypting fo chosed size of public_key\n");
+        exit(EXIT_FAILURE);
+    }
 	*encrypted_info = (char*) Mycalloc(encrypted_info_size, sizeof(char));
 	OpenSSL_add_all_algorithms();
 	outlen = RSA_public_encrypt(info_size, (const unsigned char*) info, (unsigned char*) *encrypted_info, pubKey, RSA_PKCS1_PADDING);
@@ -237,17 +241,16 @@ int Decrypt(const char* info, int info_size, char** decrypted_info, FILE* privKe
 	log_info("Decrypt\n");
 	RSA * privKey = NULL;
 	int outlen = 0;
-
 	OpenSSL_add_all_algorithms();
 	privKey = PEM_read_RSAPrivateKey(privKey_file, NULL, NULL, SECRET);
 
 	int key_size = RSA_size(privKey);
 	*decrypted_info = (char *) Mycalloc(key_size, sizeof(char));
 
-
+    log_info("message to decrypt = %s\n, length = %d\n", info, info_size);
 	outlen = RSA_private_decrypt(info_size, (const unsigned char*) info, (unsigned char*) *decrypted_info, privKey, RSA_PKCS1_PADDING);
 	if (outlen < 0) {
-		log_perror("RSA_private_decrypt\n");
+		log_perror("RSA_private_decrypt, outlen = %d\n", outlen);
 		return -1;
 	}
 	return outlen;

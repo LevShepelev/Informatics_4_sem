@@ -14,6 +14,7 @@
 #include <string.h>
 #include <security/pam_appl.h>
 #include <security/pam_misc.h>
+#include <time.h>
 
 #include <sys/types.h>
 #include <pwd.h>

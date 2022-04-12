@@ -18,7 +18,7 @@ int Slave_terminal(int fds, int fdm);
 int TCP_terminal_transmitting(int client_fd, int fdm);
 int Server_verify_answer(int socket, struct sockaddr_in* client, socklen_t* client_len);
 
-const uint16_t tcp_port = 30039;
+const uint16_t tcp_port = 30041;
 const uint16_t udp_port_first = 25001;
 const unsigned connection_time = 10000; //~30 min we wait between messages before shutdowning connection with client
 

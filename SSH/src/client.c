@@ -15,7 +15,6 @@ int main() {
             exit(EXIT_FAILURE);
         }
             
-        Server_verify_request(broadcast_socket, &server);
         UDP_communication(broadcast_socket);
     }
     else if (is_tcp == IS_TCP) {
@@ -24,7 +23,6 @@ int main() {
             log_perror("sendto");
             exit(EXIT_FAILURE);
         }
-        Server_verify_request(broadcast_socket, &server);
         TCP_communication(broadcast_socket);
     }         
 }
@@ -55,7 +53,7 @@ int TCP_communication(int broadcast_socket) {
         log_perror("connect");
         exit(1);
     }
-    
+    Server_verify_request(socket_tcp, &server);
     int fork_code = fork();
     if (fork_code == 0) {
         while (1) {
@@ -120,6 +118,7 @@ int UDP_communication(int broadcast_socket) {
 
     int socket_udp = Socket_config(&server, port, SOCK_DGRAM, SO_REUSEADDR, NOT_NEED_BIND, ((struct sockaddr_in*) &tmp_addr) -> sin_addr.s_addr);
 
+    Server_verify_request(socket_udp, &server);
     sendto(socket_udp, &test, sizeof(int), 0, (struct sockaddr*) &server, sizeof(server));
     if (!fork()) {
         while(1) {
@@ -167,6 +166,7 @@ int Server_verify_request(int socket, struct sockaddr_in* server) {
         exit(EXIT_FAILURE);
     }
     log_info("socket = %d, message = %s\n mess_size = %d\n", socket, message, mess_size);
+    sleep(1);
     int ret = sendto(socket, message, mess_size, 0, (struct sockaddr*) server, sizeof(*server));
     if (ret != mess_size) {
         log_perror("send\n");
@@ -177,8 +177,13 @@ int Server_verify_request(int socket, struct sockaddr_in* server) {
     if (strncmp(message, verify_key, strlen(verify_key)) != 0) {
         log_info("server has not been verified\n");
         exit(EXIT_FAILURE);
-    } 
+    }
+    
+    srand(time(NULL));
+    unsigned key = (unsigned) rand();
+
+    
     free(message);
     printf("Server was verified\n");
-    return 0;
+    return key;
 }

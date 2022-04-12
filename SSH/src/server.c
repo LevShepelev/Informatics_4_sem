@@ -52,11 +52,10 @@ int main() {
             continue;
         }
 
-        log_info("Msg from: %d\n", ntohs(client.sin_port));
-        Server_verify_answer(socket_broadcast, &client, &client_len);
+        log_info("Server_verify Msg from: %d\n", ntohs(client.sin_port));
+        
 
         if (fork() == 0) {
-            
             if (buf[0] == IS_UDP) {
                 uint16_t free_udp_port = udp_port_first + udp_port_counter;
 
@@ -71,6 +70,7 @@ int main() {
                     log_error("too much udp clients\n");
                     exit(EXIT_FAILURE);
                 }
+                
                 UDP_communication(socket_udp, &client);
             }
 
@@ -89,7 +89,8 @@ int TCP_communication(int socket_tcp) {
     log_info("tcp listening...\n");
     struct sockaddr_in client;
     socklen_t client_len = sizeof(client);
-    int client_fd = accept(socket_tcp, (struct sockaddr*) &client, &client_len); 
+    int client_fd = accept(socket_tcp, (struct sockaddr*) &client, &client_len);
+    Server_verify_answer(client_fd, &client, &client_len); 
     if (client_fd < 0) {
         log_perror("accept");
         return 1;
@@ -145,6 +146,7 @@ int UDP_communication(int socket_udp, struct sockaddr_in* client) {
     int fdm, fds;
     int rc = 0;
     char input[BUF_SIZE] = {'\0'}, input_recv[BUF_SIZE] = {'\0'};
+    Server_verify_answer(socket_udp, client, &client_len);
     recvfrom(socket_udp, &rc, sizeof(int), 0, (struct sockaddr*) client, &client_len);
     fdm = posix_openpt(O_RDWR);
     if (fdm < 0) {
@@ -514,10 +516,12 @@ int Server_verify_answer(int socket, struct sockaddr_in* client, socklen_t* clie
         log_perror("recvfrom\n");
         exit(EXIT_FAILURE);
     }
+    
     FILE* privKey_file = fopen("./keys/private.key", "rb");
     int mess_size = Decrypt(buf, ret, &message, privKey_file);
     fclose(privKey_file);
 
+    log_info("socket = %d, message = %s\n mess_size = %d\n", socket, message, mess_size);
     if (sendto(socket, message, mess_size, 0, (struct sockaddr*) client, *client_len) < 0) {
         log_perror("sendto\n");
         exit(EXIT_FAILURE);
