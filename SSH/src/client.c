@@ -179,11 +179,7 @@ int Server_verify_request(int socket, struct sockaddr_in* server) {
         exit(EXIT_FAILURE);
     }
     
-    srand(time(NULL));
-    unsigned key = (unsigned) rand();
-
-    
     free(message);
     printf("Server was verified\n");
-    return key;
+    return 0;
 }
