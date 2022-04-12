@@ -5,19 +5,26 @@ int main() {
     signal(SIGPIPE, SIG_IGN); 
     struct sockaddr_in server;
     int broadcast_socket = Socket_config(&server, broadcast_port, SOCK_DGRAM, SO_BROADCAST, NOT_NEED_BIND, htonl(INADDR_BROADCAST));
-    printf("if udp press 0, if tcp press 1\n");
+    printf("If you want to use udp press 0, if tcp press 1\n");
     char is_tcp = 0;
     scanf("%c", &is_tcp);
     if (is_tcp == IS_UDP) {
         printf("udp\n");
-        if (sendto(broadcast_socket, &is_tcp, sizeof(char), 0, (struct sockaddr*) &server, sizeof(server)) < 0)
+        if (sendto(broadcast_socket, &is_tcp, sizeof(char), 0, (struct sockaddr*) &server, sizeof(server)) < 0) {
             log_perror("sendto\n");
+            exit(EXIT_FAILURE);
+        }
+            
+        Server_verify_request(broadcast_socket, &server);
         UDP_communication(broadcast_socket);
     }
     else if (is_tcp == IS_TCP) {
         printf("tcp\n");
-        if (sendto(broadcast_socket, &is_tcp, sizeof(char), 0, (struct sockaddr*) &server, sizeof(server)) < 0)
+        if (sendto(broadcast_socket, &is_tcp, sizeof(char), 0, (struct sockaddr*) &server, sizeof(server)) < 0) {
             log_perror("sendto");
+            exit(EXIT_FAILURE);
+        }
+        Server_verify_request(broadcast_socket, &server);
         TCP_communication(broadcast_socket);
     }         
 }
@@ -39,7 +46,6 @@ int TCP_communication(int broadcast_socket) {
     } 
 
     recvfrom(broadcast_socket, &port, sizeof(port), 0, (struct sockaddr*) &tmp_addr, &tmp_addr_len);
-
     struct sockaddr_in server;
     char buf[BUF_SIZE] = {'\0'};
     log_info("server has: %s\n", inet_ntoa(tmp_addr.sin_addr));
@@ -49,7 +55,7 @@ int TCP_communication(int broadcast_socket) {
         log_perror("connect");
         exit(1);
     }
-
+    
     int fork_code = fork();
     if (fork_code == 0) {
         while (1) {
@@ -87,7 +93,7 @@ int TCP_communication(int broadcast_socket) {
     close(socket_tcp);
     close(broadcast_socket);
     return 0;
-    }
+}
 
 
 int UDP_communication(int broadcast_socket) {
@@ -113,6 +119,7 @@ int UDP_communication(int broadcast_socket) {
     char* buf = (char*) Mycalloc(BUF_SIZE, sizeof(char));
 
     int socket_udp = Socket_config(&server, port, SOCK_DGRAM, SO_REUSEADDR, NOT_NEED_BIND, ((struct sockaddr_in*) &tmp_addr) -> sin_addr.s_addr);
+
     sendto(socket_udp, &test, sizeof(int), 0, (struct sockaddr*) &server, sizeof(server));
     if (!fork()) {
         while(1) {
@@ -146,4 +153,32 @@ int UDP_communication(int broadcast_socket) {
             buf[i] = '\0';
         
     }
+}
+
+int Server_verify_request(int socket, struct sockaddr_in* server) {
+    char* message = NULL;
+    socklen_t client_len = sizeof(server);
+
+    FILE* pubKey_file = fopen("./keys/public.key", "rb");
+    int mess_size = Encrypt(verify_key, strlen(verify_key), &message, pubKey_file);
+    fclose(pubKey_file);
+    if (mess_size == -1) {
+        log_perror("Server_verify_request\n");
+        exit(EXIT_FAILURE);
+    }
+    log_info("socket = %d, message = %s\n mess_size = %d\n", socket, message, mess_size);
+    int ret = sendto(socket, message, mess_size, 0, (struct sockaddr*) server, sizeof(*server));
+    if (ret != mess_size) {
+        log_perror("send\n");
+        exit(EXIT_FAILURE);
+    }
+
+    ret = recvfrom(socket, message, strlen(verify_key), 0,  (struct sockaddr*) server, &client_len);
+    if (strncmp(message, verify_key, strlen(verify_key)) != 0) {
+        log_info("server has not been verified\n");
+        exit(EXIT_FAILURE);
+    } 
+    free(message);
+    printf("Server was verified\n");
+    return 0;
 }

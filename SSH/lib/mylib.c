@@ -8,6 +8,8 @@ const char GET_FILE[10] = "get_file";
 const char SEND_FILE[10] = "send_file";
 const char READY_TO_ACCEPT[20] = "ready_to_accept";
 const uint16_t broadcast_port = 29939;
+const int secret_size = 100;
+
 
 int Socket_config(struct sockaddr_in* server, uint16_t port, int socket_type, int setsockopt_option, char is_bind_need, in_addr_t addr) {
     int a = 1;
@@ -36,6 +38,7 @@ int Socket_config(struct sockaddr_in* server, uint16_t port, int socket_type, in
     return created_socket;
 }
 
+
 void* Mycalloc (int size_of_elem, int size)
     {
     char* mem = (char*) calloc (size, size_of_elem);
@@ -46,6 +49,7 @@ void* Mycalloc (int size_of_elem, int size)
         }
     return mem;
     }
+
 
 int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server) {
     log_info("accept_file\n");
@@ -92,6 +96,7 @@ int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockadd
     free(buf);
     return 0;
 }
+
 
 int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server) {
     char* path_name = strchr(input, ' ') + 1;
@@ -144,7 +149,6 @@ int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_
         }
     }
     
-    
     log_info("ALL INFO ABOUT FILE SENDED\n");
     free(buf);
     return 0;
@@ -152,6 +156,7 @@ int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_
 
 static int log_fd = -1;
 static char buf_log[BUF_SIZE];
+
 
 int print_time() {
 
@@ -167,6 +172,7 @@ int print_time() {
     return dprintf(log_fd, "%02d.%02d.%d %02d:%02d:%02d ", c -> tm_mday, c -> tm_mon, c -> tm_year, c -> tm_hour, c -> tm_min, c -> tm_sec);
 }
 
+
 int init_log(char* path) {
     static char* default_path = "./log";
 
@@ -176,6 +182,7 @@ int init_log(char* path) {
     print_time();
     return dprintf(log_fd, "My favourite programm version 0x0. Succesfull log init.\n");
 }
+
 
 void print_log(char* str, ...) {
     va_list ap;
@@ -192,6 +199,7 @@ void print_log(char* str, ...) {
     va_end(ap);
 }
 
+
 void printf_fd(int fd, char* str, ...) {
     va_list ap;
     va_start(ap, str);
@@ -205,4 +213,42 @@ void printf_fd(int fd, char* str, ...) {
     write(fd, buf_printf, ret);
 
     va_end(ap);
+}
+
+
+int Encrypt(const char* info, int info_size, char** encrypted_info, FILE* pubKey_file) {
+	log_info("Encrypt\n");
+	RSA * pubKey = NULL;
+	int outlen = 0;
+	pubKey = PEM_read_RSAPublicKey(pubKey_file, NULL, NULL, NULL);
+
+	int encrypted_info_size = RSA_size(pubKey);
+	*encrypted_info = (char*) Mycalloc(encrypted_info_size, sizeof(char));
+	OpenSSL_add_all_algorithms();
+	outlen = RSA_public_encrypt(info_size, (const unsigned char*) info, (unsigned char*) *encrypted_info, pubKey, RSA_PKCS1_PADDING);
+	if (outlen != RSA_size(pubKey)) {
+		log_perror("RSA_public_encrypt\n");
+		return -1;
+	}
+	return encrypted_info_size;
+}
+
+int Decrypt(const char* info, int info_size, char** decrypted_info, FILE* privKey_file) {
+	log_info("Decrypt\n");
+	RSA * privKey = NULL;
+	int outlen = 0;
+
+	OpenSSL_add_all_algorithms();
+	privKey = PEM_read_RSAPrivateKey(privKey_file, NULL, NULL, SECRET);
+
+	int key_size = RSA_size(privKey);
+	*decrypted_info = (char *) Mycalloc(key_size, sizeof(char));
+
+
+	outlen = RSA_private_decrypt(info_size, (const unsigned char*) info, (unsigned char*) *decrypted_info, privKey, RSA_PKCS1_PADDING);
+	if (outlen < 0) {
+		log_perror("RSA_private_decrypt\n");
+		return -1;
+	}
+	return outlen;
 }

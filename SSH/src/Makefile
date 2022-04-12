@@ -1,5 +1,6 @@
 obj = server.o
 obj_1 = client.o
+obj_2 = server_keys_config.o
 
 
 flags = $(slib)
@@ -13,9 +14,10 @@ all: build
 	$(CC) $(CFLAGS) -I$(ipath) $< -c -o $@
 
 
-build: $(obj) $(obj_1)
-	$(CC) $(obj) $(flags) $(CFLAGS) -o server -lpam -lpam_misc
-	$(CC) $(obj_1) $(flags) $(CFLAGS) -o client
+build: $(obj) $(obj_1) $(obj_2)
+	$(CC) $(obj) $(flags) $(CFLAGS) -o server -lpam -lpam_misc -lcrypto -lssl
+	$(CC) $(obj_1) $(flags) $(CFLAGS) -o client -lcrypto -lssl
+	$(CC) $(obj_2) $(flags) $(CFLAGS) -o keys_config -lcrypto -lssl
 	
 
 clean:

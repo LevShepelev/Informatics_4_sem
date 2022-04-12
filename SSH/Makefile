@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -Wall -Werror -g
+CFLAGS ?= -Wall -g
 ipath = $(realpath include)
 lpath = $(realpath lib)
 slib = $(realpath lib/mylib.a)

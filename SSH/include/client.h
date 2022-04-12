@@ -11,4 +11,6 @@ extern const uint16_t broadcast_port;
 
 int TCP_communication(int broadcast_socket);
 int UDP_communication(int broadcast_socket);
+int Server_verify_request(int socket, struct sockaddr_in* server);
 const int udp_port = 29435;
+const char verify_key[20] = "I am server";

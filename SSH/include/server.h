@@ -16,6 +16,7 @@ int Authetification(int fd_in, int fd_out);
 int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd_out[2], char* input, int socket_udp, struct sockaddr_in* client, socklen_t client_len);
 int Slave_terminal(int fds, int fdm);
 int TCP_terminal_transmitting(int client_fd, int fdm);
+int Server_verify_answer(int socket, struct sockaddr_in* client, socklen_t* client_len);
 
 const uint16_t tcp_port = 30039;
 const uint16_t udp_port_first = 25001;

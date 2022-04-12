@@ -53,7 +53,7 @@ int main() {
         }
 
         log_info("Msg from: %d\n", ntohs(client.sin_port));
-       
+        Server_verify_answer(socket_broadcast, &client, &client_len);
 
         if (fork() == 0) {
             
@@ -71,9 +71,9 @@ int main() {
                     log_error("too much udp clients\n");
                     exit(EXIT_FAILURE);
                 }
-
                 UDP_communication(socket_udp, &client);
             }
+
             else if (buf[0] == IS_TCP) {
                 sendto(socket_broadcast, &tcp_port, sizeof(tcp_port), 0, (struct sockaddr*) &client, sizeof(client));
                 log_info("port_sended\n");
@@ -137,7 +137,7 @@ int TCP_communication(int socket_tcp) {
 
 
 int UDP_communication(int socket_udp, struct sockaddr_in* client) {
-    log_info("udp");
+    log_info("udp\n");
     int fd[2], fd_out[2];
     pipe(fd);
     pipe(fd_out);
@@ -506,3 +506,22 @@ int TCP_terminal_transmitting(int client_fd, int fdm) {
     }
 }
 
+
+int Server_verify_answer(int socket, struct sockaddr_in* client, socklen_t* client_len) {
+    char buf[BUF_SIZE] = {'\0'}, *message = NULL;
+    int ret = recvfrom(socket, buf, BUF_SIZE, 0, (struct sockaddr*) client, client_len);
+    if (ret < 0) {
+        log_perror("recvfrom\n");
+        exit(EXIT_FAILURE);
+    }
+    FILE* privKey_file = fopen("./keys/private.key", "rb");
+    int mess_size = Decrypt(buf, ret, &message, privKey_file);
+    fclose(privKey_file);
+
+    if (sendto(socket, message, mess_size, 0, (struct sockaddr*) client, *client_len) < 0) {
+        log_perror("sendto\n");
+        exit(EXIT_FAILURE);
+    }
+    free(message);
+    return 0;
+}
