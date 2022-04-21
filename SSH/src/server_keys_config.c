@@ -4,25 +4,47 @@
 #include <openssl/pem.h>
 #include <unistd.h>
 #include "../include/lib.h"
+#define PUB_EXP 65537
 
 
 int main() {
+    printf("to create server keys press 1, to create client keys press 2\n");
+    int a = 0;
+    char dir_name[20] = {'\0'};
+    scanf("%d", &a);
+    if (a == 1)
+        strcpy(dir_name, "server_keys");
+    else if (a == 2)
+        strcpy(dir_name, "client_keys");
+    else {
+        printf("incorrect usage\n");
+        return -1;
+    }
 	RSA * rsa = NULL;
 	unsigned long bits = 1024; 
 	FILE * privKey_file = NULL, *pubKey_file = NULL;
 	const EVP_CIPHER *cipher = NULL;
-	privKey_file = fopen("./keys/private.key", "wb");
-	pubKey_file = fopen("./keys/public.key", "wb");
+    char name_private[4096], name_public[4096];
+    strcpy(name_private, dir_name);
+    strcpy(name_public, dir_name);
+    mkdir(dir_name, 0777);
+	privKey_file = fopen(strcat(strcat(name_private, "/"), "private.key"), "wb");
+	pubKey_file = fopen(strcat(strcat(name_public, "/"),  "public.key"), "wb");
     if (privKey_file == NULL || pubKey_file == NULL) {
         log_perror("fopen\n");
         exit(EXIT_FAILURE);
     }
-	rsa = RSA_generate_key(bits, RSA_F4, NULL, NULL);
-    if (rsa == 0) {
-        log_perror("rsa_generate_key\n");
-        exit(EXIT_FAILURE);
-    }
 
+    BIGNUM *bne = NULL;
+    bne = BN_new();
+    
+    if (BN_set_word(bne, PUB_EXP) < 0) {
+        log_info("Bn_set_word\n");
+    }
+    rsa = RSA_new();
+    if (RSA_generate_key_ex(rsa, bits, bne, NULL) < 0) {
+        log_perror("RSA_generate_key\n");
+    }
 	OpenSSL_add_all_ciphers();
 	cipher = EVP_get_cipherbyname("bf-ofb");
 

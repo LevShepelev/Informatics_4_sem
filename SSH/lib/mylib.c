@@ -2,13 +2,19 @@
 
 const char IS_UDP = '0';
 const char IS_TCP = '1';
+const char SEARCH = '2';
 const char NEED_BIND = 1;
 const char NOT_NEED_BIND = 2;
 const char GET_FILE[10] = "get_file";
 const char SEND_FILE[10] = "send_file";
+const char TIME_OUT[10] = "time_out";
+const char EXIT[10] = "exit";
 const char READY_TO_ACCEPT[20] = "ready_to_accept";
-const uint16_t broadcast_port = 29941;
+const uint16_t broadcast_port = 29949;
 const int secret_size = 100;
+const unsigned g = 5; //constants for deffi-hellman algoritm
+const unsigned p = 23;
+const unsigned connection_time = 100000; //~30 min we wait between messages before shutdowning connection with client
 
 
 int Socket_config(struct sockaddr_in* server, uint16_t port, int socket_type, int setsockopt_option, char is_bind_need, in_addr_t addr) {
@@ -31,6 +37,10 @@ int Socket_config(struct sockaddr_in* server, uint16_t port, int socket_type, in
 
     if (is_bind_need == NEED_BIND) 
         if (bind(created_socket, (struct sockaddr*) server, sizeof(*server)) < 0) {
+            if (socket_type == SOCK_DGRAM && errno == 98) {
+                log_perror("bind port problem\n");
+                return -1;
+            }
             log_perror("bind port = %hu\n", port);
             exit(EXIT_FAILURE);
         }
@@ -42,40 +52,39 @@ int Socket_config(struct sockaddr_in* server, uint16_t port, int socket_type, in
 void* Mycalloc (int size_of_elem, int size)
     {
     char* mem = (char*) calloc (size, size_of_elem);
-    if (mem == NULL) 
-        {
-        printf("Calloc error\n");
+    if (mem == NULL)  {
+        log_perror("Calloc error\n");
         exit (EXIT_FAILURE);
         }
     return mem;
     }
 
 
-int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server) {
+int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server, int key) {
     log_info("accept_file\n");
     socklen_t client_len = sizeof(*server);
     char* buf = NULL;
     unsigned message_size = 0;
     if (!is_udp) {
-        if (read(client_fd, &message_size, sizeof(unsigned)) < 0) {
+        if (Read_safe(client_fd, (char*) &message_size, sizeof(unsigned), key) < 0) {
             log_perror("read_size\n");
             return -1;
         }
         log_info("get_size message_size = %u\n", message_size);
         buf = (char*) Mycalloc(message_size, sizeof(char));
-        if (read(client_fd, buf, message_size) < 0) {
+        if (Read_safe(client_fd, buf, message_size, key) < 0) {
             log_perror("recv_message\n");
             return -1;
         }
     }
     else {
-        if (recvfrom(client_fd, &message_size, sizeof(unsigned), 0, (struct sockaddr*) &server, &client_len) < 0) {
+        if (Recvfrom_safe(client_fd, (char*) &message_size, sizeof(unsigned), 0, (struct sockaddr*) &server, &client_len, key) < 0) {
             log_perror("read_size\n");
             return -1;
         }
         log_info("get_size message_size = %u\n", message_size);
         buf = (char*) Mycalloc(message_size, sizeof(char));
-        if (recvfrom(client_fd, buf, message_size, 0, (struct sockaddr*) &server, &client_len) < 0) {
+        if (Recvfrom_safe(client_fd, buf, message_size, 0, (struct sockaddr*) &server, &client_len, key) < 0) {
             log_perror("recv_message\n");
             return -1;
         }
@@ -93,12 +102,13 @@ int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockadd
         log_perror("write");
         return -1;
     }
+    close(file_fd);
     free(buf);
     return 0;
 }
 
 
-int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server) {
+int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server, int key) {
     char* path_name = strchr(input, ' ') + 1;
     *strchr(path_name, ' ') = '\0';
     log_info("sending_file %s\n", path_name);
@@ -117,33 +127,38 @@ int Send_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_
     
     char* buf = (char*) Mycalloc(statistica.st_size, sizeof(char));
     read(file_fd, buf, statistica.st_size);
-    log_info("file %s\n", buf);
+    //log_info("file %s\n", buf);
+    usleep(100000);
     unsigned message_size = statistica.st_size;
     log_info("st_size = %u\n", message_size);
-    
-    if (is_udp) {
-        if (sendto(client_fd, &message_size, sizeof(unsigned), 0, (struct sockaddr*) server, sizeof(*server)) < 0) {
-            log_perror("write in Send_file");
-            return -1;
-        }
-        sleep(1);
-        if (sendto(client_fd, buf, message_size, 0, (struct sockaddr*) server, sizeof(*server)) < 0) {
-            log_perror("write in Send_file");
-            return -1;
-        }
-        log_info("was sended size = %d, mess = %s\n", message_size, buf);
-        if (sendto(client_fd, buf, message_size, 0, (struct sockaddr*) server, sizeof(*server)) < 0) {
-            log_perror("write in Send_file");
-            return -1;
-        }
+    if (Sendto_safe(client_fd, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT), 0, (struct sockaddr*) server, sizeof(*server), key) < 0) {
+        log_perror("write ins Send_file");
+        return -1;
     }
-    else {
-        if (write(client_fd, &message_size, sizeof(unsigned)) < 0) {
+    usleep(100000);
+    if (is_udp) {
+        if (Sendto_safe(client_fd, (char*) &message_size, sizeof(unsigned), 0, (struct sockaddr*) server, sizeof(*server), key) < 0) {
             log_perror("write in Send_file");
             return -1;
         }
         usleep(100000);
-        if (write(client_fd, buf, message_size) < 0) {
+        if (Sendto_safe(client_fd, buf, message_size, 0, (struct sockaddr*) server, sizeof(*server), key) < 0) {
+            log_perror("write in Send_file");
+            return -1;
+        }
+        log_info("was sended size = %d, mess = %s\n", message_size, buf);
+        /*if (sendto(client_fd, buf, message_size, 0, (struct sockaddr*) server, sizeof(*server)) < 0) {
+            log_perror("write in Send_file");
+            return -1;
+        }*/
+    }
+    else {
+        if (Write_safe(client_fd, (char*) &message_size, sizeof(unsigned), key) < 0) {
+            log_perror("write in Send_file");
+            return -1;
+        }
+        usleep(100000);
+        if (Write_safe(client_fd, buf, message_size, key) < 0) {
             log_perror("write in Send_file");
             return -1;
         }
@@ -174,11 +189,13 @@ int print_time() {
 
 
 int init_log(char* path) {
-    static char* default_path = "./log";
+    static char* default_path = "/home/lev/Informatics_4_sem/SSH/src/log";
 
     log_fd = open(path ? path : default_path, O_CREAT | O_RDWR | O_APPEND, 0644);
-    if (log_fd < 0)
+    if (log_fd < 0) {
+        perror("Cant open file\n");
         exit(1);
+    }
     print_time();
     return dprintf(log_fd, "My favourite programm version 0x0. Succesfull log init.\n");
 }
@@ -215,13 +232,31 @@ void printf_fd(int fd, char* str, ...) {
     va_end(ap);
 }
 
+void printf_fd_safe(int fd, int key, char* str, ...) {
+    va_list ap;
+    va_start(ap, str);
+    char buf_printf[10000];
+    if (fd < 0) {
+            printf("no such file\n");
+            exit(1);
+        }
+
+    int ret = vsnprintf(buf_printf, 10000, str, ap);
+    Write_safe(fd, buf_printf, ret, key);
+
+    va_end(ap);
+}
+
 
 int Encrypt(const char* info, int info_size, char** encrypted_info, FILE* pubKey_file) {
 	log_info("Encrypt\n");
 	RSA * pubKey = NULL;
 	int outlen = 0;
 	pubKey = PEM_read_RSAPublicKey(pubKey_file, NULL, NULL, NULL);
-
+    if (pubKey == NULL) {
+        log_perror("PEM_read_ probably problems with pubkey_file\n");
+        exit(EXIT_FAILURE);
+    }
 	int encrypted_info_size = RSA_size(pubKey);
     if (info_size - 11 > encrypted_info_size) {
         log_error("Too big message for encrypting fo chosed size of public_key\n");
@@ -247,11 +282,82 @@ int Decrypt(const char* info, int info_size, char** decrypted_info, FILE* privKe
 	int key_size = RSA_size(privKey);
 	*decrypted_info = (char *) Mycalloc(key_size, sizeof(char));
 
-    log_info("message to decrypt = %s\n, length = %d\n", info, info_size);
+    //log_info("message to decrypt = %s\n, length = %d\n", info, info_size);
 	outlen = RSA_private_decrypt(info_size, (const unsigned char*) info, (unsigned char*) *decrypted_info, privKey, RSA_PKCS1_PADDING);
 	if (outlen < 0) {
 		log_perror("RSA_private_decrypt, outlen = %d\n", outlen);
 		return -1;
 	}
 	return outlen;
+}
+
+
+void Symmetric_encrypting(char* data, int size, int key) {
+    for (int i = 0; i < size; i++)
+        data = data + key;
+}
+
+
+void Symmetric_decrypting(char* data, int size, int key) {
+    for (int i = 0; i < size; i++)
+        data = data - key;
+}
+
+
+int Sendto_safe(int fd, const char* buf, size_t n, int flags, __CONST_SOCKADDR_ARG addr, socklen_t addr_len, int key) {
+    char* buf_copy = Mycalloc(n, sizeof(char));
+    strcpy(buf_copy, buf);
+    Symmetric_encrypting(buf_copy, n, key);
+    int ret = sendto(fd, buf_copy, n, flags, addr, addr_len);
+    if (ret < 0) {
+        log_perror("sendto\n");
+        exit(EXIT_FAILURE);
+    }
+    //free(buf_copy);
+    //if (errno) log_perror("sendto_safe\n");
+    return ret;
+}
+
+
+int Recvfrom_safe(int fd, char* buf, size_t n, int flags, __SOCKADDR_ARG addr, socklen_t *__restrict addr_len, int key) {
+    int ret = recvfrom(fd, buf, n, flags, addr, addr_len);
+    if (ret < 0) {
+        log_perror("recvfrom\n");
+        exit(EXIT_FAILURE);
+    }
+    Symmetric_decrypting(buf, ret, key);
+    return ret;
+}
+
+
+int Read_safe(int fd, char* buf, size_t size, int key) {
+    int ret = read(fd, buf, size);
+    if (ret < 0) {
+        log_perror("read\n");
+        exit(EXIT_FAILURE);
+    }
+    Symmetric_decrypting(buf, ret, key);
+    return ret;
+}
+
+
+int Write_safe(int fd, const char* buf, size_t size, int key) {
+    char* buf_copy = Mycalloc(size, sizeof(char));
+    strcpy(buf_copy, buf);
+    Symmetric_encrypting(buf_copy, size, key);
+    int ret = write(fd, buf_copy, size);
+    if (ret < 0) {
+        log_perror("write\n");
+        exit(EXIT_FAILURE);
+    }
+    //free(buf_copy);
+    //if (errno) log_perror("write_safe\n");
+    return ret;
+}
+
+void Set_child_death_signal() {
+    if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0) {
+        log_perror("prctl\n");
+        exit(EXIT_FAILURE);
+    }
 }

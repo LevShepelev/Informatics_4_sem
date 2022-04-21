@@ -3,6 +3,20 @@
 
 #define DEBUG
 int main() {
+    int pid = fork();
+    #ifndef DEBUG
+    if (pid > 0)
+        exit (0);
+    #endif
+    #ifdef DEBUG
+    if (pid == 0)
+        exit (0);
+    #endif
+     #ifndef DEBUG                                             
+    if (setsid () < 0)             
+        exit (0);
+    #endif
+    prctl(PR_SET_PDEATHSIG, SIGHUP);
     signal(SIGPIPE, SIG_IGN); 
 
     printf("server_pid = %d\n", getpid());
@@ -11,18 +25,19 @@ int main() {
     struct sockaddr_in client;
     int a = 1;
     struct sockaddr_in broadcast_server;
-    int socket_broadcast = Socket_config(&broadcast_server, broadcast_port, SOCK_DGRAM, 0, NEED_BIND, htonl(INADDR_ANY));
+    int socket_broadcast = Socket_config(&broadcast_server, broadcast_port, SOCK_DGRAM, SO_BROADCAST, NEED_BIND, htonl(INADDR_BROADCAST));
     if (setsockopt(socket_broadcast, SOL_SOCKET, SO_REUSEADDR, &a, sizeof(a)) < 0) {
         log_perror("setsockopt");
         exit(EXIT_FAILURE);
     }
-    /*struct sockaddr_in tcp_server;
+
+    struct sockaddr_in tcp_server;
 
     int socket_tcp = Socket_config(&tcp_server, tcp_port, SOCK_STREAM, SO_REUSEADDR, NEED_BIND, htonl(INADDR_ANY));
     if (listen(socket_tcp, MAX_CLIENTS) < 0) {
         log_perror("listen");
         return 1;
-    }*/
+    }
 
     while (1){
         socklen_t client_len = sizeof(client);
@@ -37,14 +52,10 @@ int main() {
         }
 
         log_info("Server_verify Msg from: %d\n", ntohs(client.sin_port));
-        tcp_port++;
-        free_udp_port++;
-        if (fork() == 0) {
-            Set_child_death_signal();
-            if (Create_session(buf[0], socket_broadcast, &client) < 0)
+
+        if (fork() == 0) 
+            if (Create_session(buf[0], socket_broadcast, &client, socket_tcp) < 0)
                 return -1;
-            return 0;
-        }
     }        
 }
     
@@ -67,21 +78,19 @@ int TCP_communication(int socket_tcp) {
 
     if (Terminals_config(&fdm, &fds) < 0)
         return -1;
-    int fd_for_dir_name[2];
-    pipe(fd_for_dir_name);
+
     // Create the child process
     if (fork() == 0) {
-        Set_child_death_signal();
         dup2(client_fd, STDIN_FILENO);
         dup2(client_fd, STDOUT_FILENO);
         // Close the slave side of the PTY
         close(fds);
-        if (TCP_terminal_transmitting(client_fd, fdm, fd_for_dir_name[1], key) < 0) {
+        if (TCP_terminal_transmitting(client_fd, fdm) < 0) {
             log_perror("TCP_terminal_transmitting\n");
             return -1;
         }
     }
-    else return Slave_terminal(fds, fdm, fd_for_dir_name[0]);
+    else return Slave_terminal(fds, fdm);
     return 0;
 }
 
@@ -94,8 +103,6 @@ int UDP_communication(int socket_udp, struct sockaddr_in* client) {
     socklen_t client_len = sizeof(*client); 
     int fdm = 0, fds = 0;
     int rc = 0;
-    int fd_for_dir_name[2];
-    pipe(fd_for_dir_name);
     char input[BUF_SIZE] = {'\0'}, input_recv[BUF_SIZE] = {'\0'};
     recvfrom(socket_udp, &rc, sizeof(int), 0, (struct sockaddr*) client, &client_len);
     Server_verify_answer(socket_udp, client, &client_len);
@@ -106,33 +113,24 @@ int UDP_communication(int socket_udp, struct sockaddr_in* client) {
         return -1;
     // Create the child process
     if (fork() == 0) {
-        Set_child_death_signal();
         dup2(fd[0], STDIN_FILENO);
         dup2(fd_out[1], STDOUT_FILENO);
         // Close the slave side of the PTY
         close(fds);
 
-        struct pollfd fd_in[2];
+        struct pollfd fd_in[3];
         fd_in[0].fd = fd[0];
         fd_in[0].events = POLLIN;
     
         fd_in[1].fd = fdm;
         fd_in[1].events = POLLIN;
+
+        fd_in[2].fd = fd_out[0];
+        fd_in[2].events = POLLIN;
             
-        if (fork() == 0) {
-            Set_child_death_signal();
-            struct pollfd fd_socket = {socket_udp, POLLIN, 0};
+        if (fork() == 0) 
             while (1) {
-                int ret = poll(&fd_socket, 1, connection_time);
-                if (ret == -1) {
-                    log_perror("poll");
-                    exit(EXIT_FAILURE);
-                }
-                if (ret == 0) {
-                    log_info("client reader finished\n");
-                    return 0;
-                } 
-                int rc = Recvfrom_safe(socket_udp, input_recv, BUF_SIZE, 0, (struct sockaddr*) client, &client_len, key);
+                int rc = recvfrom(socket_udp, input_recv, BUF_SIZE, 0, (struct sockaddr*) client, &client_len);
                 log_info("recvform sz = %d  %s\n", rc, input_recv);
                 if (rc < 0) {
                     log_perror("recvfrom\n");
@@ -147,39 +145,30 @@ int UDP_communication(int socket_udp, struct sockaddr_in* client) {
                 
                 }
             }
-        }
-        if (fork() == 0) {
-            Set_child_death_signal();
-            struct pollfd fd_pipe = {fd_out[0], POLLIN, 0};
+
+        if (fork() == 0)
             while(1) {
-                int ret = poll(&fd_pipe, 1, connection_time);
-                if (ret == -1) {
-                    log_perror("poll");
-                    exit(EXIT_FAILURE);
-                }
-                if (ret == 0) {
-                    log_info("pipe reader finished\n");
-                    return 0;
-                } 
                 log_info("master_side\n");
                 rc = read(fd_out[0], input, BUF_SIZE);
                 log_info("input = %s\n", input);
                 //for (int i = 0; i < rc; i++)
                     //printf("%d '%c', ", input[i], input[i]);
-                if (Sendto_safe(socket_udp, input, rc, 0, (struct sockaddr*) client, client_len, key) != rc) {
+                if (sendto(socket_udp, input, rc, 0, (struct sockaddr*) client, client_len) != rc) {
                     log_perror("sendto\n");
                 }
-                memset(input, '\0', BUF_SIZE);                    
-            }
-        }     
+                for (int i = 0; i < BUF_SIZE; i++)
+                    input[i] = '\0';
+                    
+                fd_in[2].revents = 0;
+            }     
             
-        if (UDP_terminal_transmitting(fd_in, fdm, fd, fd_out, input, socket_udp, client, client_len, fd_for_dir_name[1], key) < 0) {
+        if (UDP_terminal_transmitting(fd_in, fdm, fd, fd_out, input, socket_udp, client, client_len) < 0) {
             log_error("transmitting_ended\n");
             return -1;
         }
+
     }
-    else return Slave_terminal(fds, fdm, fd_for_dir_name[0]);
-    log_info("transmitiing finished\n");
+    else return Slave_terminal(fds, fdm);
     return 0;
 }
 
@@ -216,15 +205,13 @@ int Login_into_user(char* username){
 }
 
 
-int Authetification(int fd_in, int fd_out, int fdm, int is_udp, int key) {
+int Authetification(int fd_in, int fd_out) {
     struct  passwd* info;
     int ret = 0;
-    char buf[BUF_SIZE] = {'\0'};
+    char buf[4096];
     log_info("write name of user\n");
 
-    if (is_udp)
-        printf_fd(fd_out, "login: ");
-    else printf_fd_safe(fd_out, key, "login: ");
+    printf_fd(fd_out, "login: ");
     while (ret <= 0) {
         ret = read(fd_in, buf, 4096);
         log_info("waiting\n");
@@ -236,19 +223,13 @@ int Authetification(int fd_in, int fd_out, int fdm, int is_udp, int key) {
     log_info("authetification: user = %s\n", buf);
     info = getpwnam(buf); //достает про пользователя информацию
     if (!info) {
-        if (is_udp)
-            printf_fd(fd_out, "Wrong name of user, try again\n");
-        else printf_fd_safe(fd_out, key, "Wrong name of user, try again\n");
+        printf_fd(fd_out, "Wrong name of user, try again\n");
         log_perror("getpwnam");
         return -1;
     }
-    if (is_udp)
-        printf_fd(fd_out, "password: ");
-    else printf_fd_safe(fd_out, key, "password: ");
+    printf_fd(fd_out, "password: ");
     if (Login_into_user(buf)) {
-        if (is_udp)
-            printf_fd(fd_out, "Unseccesfull authentification\n");
-        else printf_fd_safe(fd_out, key, "Unseccesfull authentification\n");
+        printf_fd(fd_out, "Unseccesfull authentification\n");
         return -1;
     }
     if (setgid(info -> pw_gid)) {
@@ -261,29 +242,15 @@ int Authetification(int fd_in, int fd_out, int fdm, int is_udp, int key) {
         log_perror("setuid");
         return -1;
     }
-    char dir_name[BUF_SIZE] = {'\0'};
-    memcpy(dir_name, "/home/", strlen("/home/"));
-    if (chdir(strcat(dir_name, buf)) < 0) {
-        log_perror("chdir\n");
-        exit(EXIT_FAILURE);
-    }
-    write(fdm, dir_name, strlen(dir_name));
     return 0;
 }
 
 
-int Slave_terminal(int fds, int fdm, int fd_for_dir_name) {
+int Slave_terminal(int fds, int fdm) {
     
     struct termios slave_orig_term_settings; // Saved terminal settings
     struct termios new_term_settings; // Current terminal settings
-    char dir_name[BUF_SIZE] = {'\0'};
-    int ret = read(fd_for_dir_name, dir_name, BUF_SIZE);
-    if (ret <= 0) {
-        log_perror("slave didnt get new direcroty name\n");
-        exit(EXIT_FAILURE);
-    }
-    log_info("slave has change directory %s\n", dir_name);
-    chdir(dir_name);
+
     // Close the master side of the PTY
     close(fdm);
 
@@ -322,11 +289,12 @@ int Slave_terminal(int fds, int fdm, int fd_for_dir_name) {
 }
 
 
-int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd_out[2], char* input, int socket_udp, struct sockaddr_in* client, socklen_t client_len, int fd_for_dir_name, int key) {
+int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd_out[2], char* input, int socket_udp, struct sockaddr_in* client, socklen_t client_len) {
     int auth = 1;
     while (1) {
+
         if (auth) {
-            auth = Authetification(fd[0], fd_out[1], fd_for_dir_name, 1, key);
+            auth = Authetification(fd[0], fd_out[1]);
             if (auth < 0)
                 continue;
         }
@@ -336,11 +304,6 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
             log_perror("poll");
             exit(EXIT_FAILURE);
         }
-        if (ret == 0) {
-            if (Sendto_safe(socket_udp, TIME_OUT, strlen(TIME_OUT), 0, (struct sockaddr*) client, client_len, key) != strlen(TIME_OUT))
-                log_perror("sendto\n");
-            return 0;
-        } 
 
         if (fd_in[0].revents & POLLIN) {
             log_info("standard input\n");
@@ -352,20 +315,28 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
             int rc = read(fd_in[0].fd, input, BUF_SIZE);
             log_info("rc = %d, get: %s\n", rc, input);
             if (rc > 0) {
-                if (Check_message_send_file(input, socket_udp, 1, (struct sockaddr_in*) client, key) == 1)
+                if (strncmp(input, SEND_FILE, strlen(SEND_FILE)) == 0) {
+                    char message[20];
+                    log_info("wait READY_TO_ACCEPT\n");
+                    rc = read(fd_in[0].fd, message, strlen(READY_TO_ACCEPT));
+                    if (rc < 0) {
+                        log_perror("read\n");
+                        return -1;
+                    }
+                    log_info("message = %s\n", message);
+                    if (strncmp(message, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT)) == 0)
+                        Accept_file(input, fd_in[0].fd, rc, 0, NULL);
                     continue;
-                if (strncmp(input, EXIT, strlen(EXIT)) == 0) {
-                    log_info("client disconected\n");
-                    return 0;
                 }
+
                 if (strncmp(input, GET_FILE, strlen(GET_FILE)) == 0) {
                     printf("call Send_file\n");
-                    if (Sendto_safe(socket_udp, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT), 0, (struct sockaddr*) client, client_len, key) < 0) {
+                    if (sendto(socket_udp, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT), 0, (struct sockaddr*) client, client_len) < 0) {
                         log_perror("write ins Send_file");
                         return -1;
                     }
                     sleep(1);
-                    Send_file(input, socket_udp, rc, 1, client, key);
+                    Send_file(input, socket_udp, rc, 1, client);
                     continue;
                 }
                 log_info("written, %s\n", input);
@@ -386,10 +357,11 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
             log_info("input = %s\n", input);
             //for (int i = 0; i < rc; i++)
                 //printf("%d '%c', ", input[i], input[i]);
-            if (Sendto_safe(socket_udp, input, rc, 0, (struct sockaddr*) client, client_len, key) != rc) {
+            if (sendto(socket_udp, input, rc, 0, (struct sockaddr*) client, client_len) != rc) {
                 log_perror("sendto\n");
             }
-            memset(input, '\0', BUF_SIZE);
+            for (int i = 0; i < BUF_SIZE; i++)
+                input[i] = '\0';
                 
             fd_in[1].revents = 0;
         }     
@@ -397,7 +369,7 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
 }
 
 
-int TCP_terminal_transmitting(int client_fd, int fdm, int fd_for_dir_name, int key) {
+int TCP_terminal_transmitting(int client_fd, int fdm) {
     struct pollfd fds[2];
     fds[0].fd = client_fd;
     fds[0].events = POLLIN;
@@ -410,9 +382,7 @@ int TCP_terminal_transmitting(int client_fd, int fdm, int fd_for_dir_name, int k
 
     while (1) {
         if (auth) {
-            auth = Authetification(client_fd, client_fd, fd_for_dir_name, 0, key);
-            char bufer[BUF_SIZE] = {'\0'};
-            log_info("from fdm %s\n", bufer);
+            auth = Authetification(client_fd, client_fd);
             if (auth < 0)
                 continue;
         }
@@ -424,29 +394,29 @@ int TCP_terminal_transmitting(int client_fd, int fdm, int fd_for_dir_name, int k
         }
 
         if (ret == 0) {
-            log_info("Timeout nobody sends messages\n");
-            if (Write_safe(client_fd, TIME_OUT, strlen(TIME_OUT), key) != strlen(TIME_OUT))
-                log_perror("sendto\n");
             return 0;
         }
         
         if (fds[0].revents & POLLIN)  {
             fds[0].revents = 0;
-            int rc = Read_safe(client_fd, input, BUF_SIZE, key);
-            log_info("standard input was red %d symbols\n", rc);
+            log_info("standard input\n");
+            int rc = read(client_fd, input, BUF_SIZE);
             if (rc == 0)
                 return 0;
 
             if (rc > 0) {
-                if (Check_message_send_file(input, client_fd, 0, NULL, key) == 1) {
-                    Write_safe(client_fd, "File was accepted\n", strlen("File was accepted\n"), key);
-                    write(fdm, "\n", strlen("\n"));
+                if (strncmp(input, SEND_FILE, strlen(SEND_FILE)) == 0) {
+                    char message[sizeof(READY_TO_ACCEPT)];
+                    log_info("wait READY_TO_ACCEPT\n");
+                    rc = read(client_fd, message, strlen(READY_TO_ACCEPT));
+                    if (rc < 0) {
+                        log_perror("read\n");
+                        return -1;
+                    }
+                    log_info("message = %s\n", message);
+                    if (strncmp(message, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT)) == 0)
+                        Accept_file(input, client_fd, rc, 0, NULL);
                     continue;
-                }
-
-                if (strncmp(input, EXIT, strlen(EXIT) == 0)) {
-                    log_info("client disconected\n");
-                    return 0;
                 }
 
                 if (strncmp(input, GET_FILE, strlen(GET_FILE)) == 0) {
@@ -456,7 +426,7 @@ int TCP_terminal_transmitting(int client_fd, int fdm, int fd_for_dir_name, int k
                         return -1;
                     }
                     sleep(1);
-                    Send_file(input, client_fd, rc, 0, 0, key);
+                    Send_file(input, client_fd, rc, 0, 0);
                     continue;
                 }
 
@@ -475,7 +445,7 @@ int TCP_terminal_transmitting(int client_fd, int fdm, int fd_for_dir_name, int k
             int rc = read(fdm, input, BUF_SIZE);
             //for (int i = 0; i < rc; i++)
                 //printf("%d '%c', ", input[i], input[i]);
-            Write_safe(client_fd, input, rc, key);
+            write(client_fd, input, rc);
         }     
     }
 }
@@ -489,7 +459,7 @@ int Server_verify_answer(int socket, struct sockaddr_in* client, socklen_t* clie
         exit(EXIT_FAILURE);
     }
     
-    FILE* privKey_file = fopen("/home/lev/Informatics_4_sem/SSH/src/server_keys/private.key", "rb");
+    FILE* privKey_file = fopen("./server_keys/private.key", "rb");
     if (privKey_file == NULL) {
         log_perror("fopen error\n");
         exit(EXIT_FAILURE);
@@ -515,7 +485,7 @@ unsigned Get_symm_key(int socket, struct sockaddr_in* client, socklen_t* client_
         log_perror("recvfrom\n");
         exit(EXIT_FAILURE);
     }
-    FILE* privKey_file = fopen("/home/lev/Informatics_4_sem/SSH/src/server_keys/private.key", "rb");
+    FILE* privKey_file = fopen("./server_keys/private.key", "rb");
     int mess_size = Decrypt(buf, ret, &message, privKey_file);
     if (mess_size == sizeof(unsigned))
         memcpy(&A, message, mess_size);
@@ -528,14 +498,14 @@ unsigned Get_symm_key(int socket, struct sockaddr_in* client, socklen_t* client_
         log_perror("recvfrom\n");
         exit(EXIT_FAILURE);
     }
-    FILE* client_pub_key = fopen("/home/lev/Informatics_4_sem/SSH/src/server_keys/client_pub.key", "wb");
+    FILE* client_pub_key = fopen("./server_keys/client_pub.key", "wb");
     ret = fwrite(buf, sizeof(char), ret, client_pub_key);
     if (ret < 0) {
         log_perror("fwrite failed\n");
         exit(EXIT_FAILURE);
     }
     fclose(client_pub_key);
-    client_pub_key = fopen("/home/lev/Informatics_4_sem/SSH/src/server_keys/client_pub.key", "rb");
+    client_pub_key = fopen("./server_keys/client_pub.key", "rb");
     mess_size = Encrypt((char*) &B, sizeof(unsigned), &message, client_pub_key);
     if (mess_size == -1) {
         log_perror("encrypt A error\n");
@@ -550,11 +520,12 @@ unsigned Get_symm_key(int socket, struct sockaddr_in* client, socklen_t* client_
 }
 
 
-int Create_session(char is_udp, int socket_broadcast, struct sockaddr_in* client) {
+int Create_session(char is_udp, int socket_broadcast, struct sockaddr_in* client, int socket_tcp) {
     if (is_udp == IS_UDP) {
         int socket_udp = 0;
         struct sockaddr_in server;
         do {
+            free_udp_port++;
             socket_udp = Socket_config(&server, free_udp_port, SOCK_DGRAM, SO_REUSEADDR, NEED_BIND, htonl(INADDR_ANY));//TODO:fix port
         } while (socket_udp <= 0);
         if (sendto(socket_broadcast, &free_udp_port, sizeof(free_udp_port), 0, (struct sockaddr*) client, sizeof(*client)) < 0) {
@@ -568,25 +539,13 @@ int Create_session(char is_udp, int socket_broadcast, struct sockaddr_in* client
         }
         
         UDP_communication(socket_udp, client);
-        close(socket_udp);
     }
 
     else if (is_udp == IS_TCP) {
-        struct sockaddr_in tcp_server;
-        log_info("tcp_port = %d\n", tcp_port);
-        int socket_tcp = Socket_config(&tcp_server, tcp_port, SOCK_STREAM, SO_REUSEADDR, NEED_BIND, htonl(INADDR_ANY));
-        if (listen(socket_tcp, MAX_CLIENTS) < 0) {
-            log_perror("listen");
-            return 1;
-        }
+        tcp_port++;
         sendto(socket_broadcast, &tcp_port, sizeof(tcp_port), 0, (struct sockaddr*) client, sizeof(*client));
         log_info("port_sended\n");
         TCP_communication(socket_tcp);
-        close(socket_tcp);
-    }
-
-    else if (is_udp == SEARCH) {
-        sendto(socket_broadcast, &tcp_port, sizeof(tcp_port), 0, (struct sockaddr*) client, sizeof(*client));
     }
     return 0;
 }
@@ -613,28 +572,5 @@ int Terminals_config(int* fdm, int* fds) {
 
     // Open the slave side ot the PTY
     *fds = open(ptsname(*fdm), O_RDWR);
-    return 0;
-}
-
-
-int Check_message_send_file(char* input, int socket, int is_udp, struct sockaddr_in* client, int key) {
-    socklen_t client_len = sizeof(*client); 
-    if (strncmp(input, SEND_FILE, strlen(SEND_FILE)) == 0) {
-        char message[sizeof(READY_TO_ACCEPT)];
-        int rc = 0;
-        log_info("wait READY_TO_ACCEPT\n");
-        if (is_udp) {
-            rc = Recvfrom_safe(socket, message, strlen(READY_TO_ACCEPT), 0, client, &client_len, key);
-        }
-        else rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
-        if (rc < 0) {
-            log_perror("read\n");
-            return -1;
-        }
-        log_info("message = %s\n", message);
-        if (strncmp(message, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT)) == 0)
-            Accept_file(input, socket, rc, is_udp, NULL, key);
-        return 1;
-    }
     return 0;
 }

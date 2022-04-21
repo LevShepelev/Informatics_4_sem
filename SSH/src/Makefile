@@ -15,9 +15,9 @@ all: build
 
 
 build: $(obj) $(obj_1) $(obj_2)
-	$(CC) $(obj) $(flags) $(CFLAGS) -o server -lpam -lpam_misc -lcrypto -lssl
-	$(CC) $(obj_1) $(flags) $(CFLAGS) -o client -lcrypto -lssl
-	$(CC) $(obj_2) $(flags) $(CFLAGS) -o keys_config -lcrypto -lssl
+	$(CC) $(obj) $(flags) $(CFLAGS) -o server -lpam -lpam_misc -lcrypto -lssl -lm
+	$(CC) $(obj_1) $(flags) $(CFLAGS) -o client -lcrypto -lssl -lm
+	$(CC) $(obj_2) $(flags) $(CFLAGS) -o keys_config -lcrypto -lssl -lm
 	
 
 clean:
