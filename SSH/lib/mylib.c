@@ -62,34 +62,20 @@ void* Mycalloc (int size_of_elem, int size)
 
 int Accept_file(char* input, int client_fd, int size, int is_udp, struct sockaddr_in* server, int key) {
     log_info("accept_file\n");
-    socklen_t client_len = sizeof(*server);
     char* buf = NULL;
     unsigned message_size = 0;
-    if (!is_udp) {
-        if (Read_safe(client_fd, (char*) &message_size, sizeof(unsigned), key) < 0) {
-            log_perror("read_size\n");
-            return -1;
-        }
-        log_info("get_size message_size = %u\n", message_size);
-        buf = (char*) Mycalloc(message_size, sizeof(char));
-        if (Read_safe(client_fd, buf, message_size, key) < 0) {
-            log_perror("recv_message\n");
-            return -1;
-        }
+    
+    if (Read_safe(client_fd, (char*) &message_size, sizeof(unsigned), key) < 0) {
+        log_perror("read_size\n");
+        return -1;
     }
-    else {
-        if (Recvfrom_safe(client_fd, (char*) &message_size, sizeof(unsigned), 0, (struct sockaddr*) &server, &client_len, key) < 0) {
-            log_perror("read_size\n");
-            return -1;
-        }
-        log_info("get_size message_size = %u\n", message_size);
-        buf = (char*) Mycalloc(message_size, sizeof(char));
-        if (Recvfrom_safe(client_fd, buf, message_size, 0, (struct sockaddr*) &server, &client_len, key) < 0) {
-            log_perror("recv_message\n");
-            return -1;
-        }
+    log_info("get_size message_size = %u\n", message_size);
+    buf = (char*) Mycalloc(message_size, sizeof(char));
+    if (Read_safe(client_fd, buf, message_size, key) < 0) {
+        log_perror("recv_message\n");
+        return -1;
     }
-
+    
     char* path_name = strchr(strchr(input, ' ') + 1, ' ') + 1;
     *strchr(input, '\n') = '\0';
     log_info("path_name = %s: end\n", path_name);

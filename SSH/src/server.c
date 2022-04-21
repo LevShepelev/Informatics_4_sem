@@ -352,7 +352,7 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
             int rc = read(fd_in[0].fd, input, BUF_SIZE);
             log_info("rc = %d, get: %s\n", rc, input);
             if (rc > 0) {
-                if (Check_message_send_file(input, socket_udp, 1, (struct sockaddr_in*) client, key) == 1)
+                if (Check_message_send_file(input, fd_in[0].fd, 1, (struct sockaddr_in*) client, key) == 1)
                     continue;
                 if (strncmp(input, EXIT, strlen(EXIT)) == 0) {
                     log_info("client disconected\n");
@@ -618,13 +618,12 @@ int Terminals_config(int* fdm, int* fds) {
 
 
 int Check_message_send_file(char* input, int socket, int is_udp, struct sockaddr_in* client, int key) {
-    socklen_t client_len = sizeof(*client); 
     if (strncmp(input, SEND_FILE, strlen(SEND_FILE)) == 0) {
         char message[sizeof(READY_TO_ACCEPT)];
         int rc = 0;
         log_info("wait READY_TO_ACCEPT\n");
         if (is_udp) {
-            rc = Recvfrom_safe(socket, message, strlen(READY_TO_ACCEPT), 0, client, &client_len, key);
+            rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
         }
         else rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
         if (rc < 0) {
@@ -634,6 +633,7 @@ int Check_message_send_file(char* input, int socket, int is_udp, struct sockaddr
         log_info("message = %s\n", message);
         if (strncmp(message, READY_TO_ACCEPT, strlen(READY_TO_ACCEPT)) == 0)
             Accept_file(input, socket, rc, is_udp, NULL, key);
+        log_info("file_accepted\n");
         return 1;
     }
     return 0;
