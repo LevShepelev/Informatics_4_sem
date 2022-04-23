@@ -18,7 +18,7 @@ extern const unsigned connection_time;
 int TCP_communication(int broadcast_socket);
 int UDP_communication(int broadcast_socket);
 int Server_verify_request(int socket, struct sockaddr_in* server);
-unsigned Send_symmetric_key(int socket, struct sockaddr_in* server);
+int Send_symmetric_key(int socket, struct sockaddr_in* server);
 int Send_file_sending_message(int socket, char* buf, struct sockaddr_in* server, int sz, int is_udp, int key);
 int Broadcast_search(int socket, struct sockaddr_in* server);
 

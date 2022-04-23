@@ -73,7 +73,7 @@ int TCP_communication(int broadcast_socket) {
         exit(1);
     }
     Server_verify_request(socket_tcp, &server);
-    unsigned key = Send_symmetric_key(socket_tcp, &server);
+    int key = Send_symmetric_key(socket_tcp, &server);
     log_info("key = %u\n", key);
     int fork_code = fork();
     if (fork_code == 0) {
@@ -153,7 +153,7 @@ int UDP_communication(int broadcast_socket) {
     int socket_udp = Socket_config(&server, port, SOCK_DGRAM, SO_REUSEADDR, NOT_NEED_BIND, ((struct sockaddr_in*) &tmp_addr) -> sin_addr.s_addr);
     sendto(socket_udp, (char*) &test, sizeof(int), 0, (struct sockaddr*) &server, sizeof(server));
     Server_verify_request(socket_udp, &server);
-    unsigned key = Send_symmetric_key(socket_udp, &server);
+    int key = Send_symmetric_key(socket_udp, &server);
     printf("key = %u\n", key);
     if (fork() == 0) {
         Set_child_death_signal();
@@ -208,8 +208,7 @@ int UDP_communication(int broadcast_socket) {
         }
 
         write(STDOUT_FILENO, buf, BUF_SIZE);
-        for (int i = 0; i < BUF_SIZE; i++)
-            buf[i] = '\0';
+        memset(buf, '\0', BUF_SIZE);
         
     }
 }
@@ -249,13 +248,13 @@ int Server_verify_request(int socket, struct sockaddr_in* server) {
 }
 
 
-unsigned Send_symmetric_key(int socket, struct sockaddr_in* server) {
+int Send_symmetric_key(int socket, struct sockaddr_in* server) {
     char* message = NULL;
     socklen_t client_len = sizeof(server);
-    unsigned  a = rand() % 10;
-    unsigned A = ((unsigned) powl(g, a)) % p, B = 0;
+    int  a = rand() % 10;
+    int A = ((int) powl(g, a)) % p, B = 0;
     FILE* pubKey_file = fopen("/home/lev/Informatics_4_sem/SSH/src/server_keys/public.key", "rb");
-    int mess_size = Encrypt((char*) &A, sizeof(unsigned), &message, pubKey_file);
+    int mess_size = Encrypt((char*) &A, sizeof(int), &message, pubKey_file);
     if (mess_size == -1) {
         log_perror("Server_verify_request\n");
         exit(EXIT_FAILURE);
@@ -284,13 +283,13 @@ unsigned Send_symmetric_key(int socket, struct sockaddr_in* server) {
     }
     FILE* privKey_file = fopen("/home/lev/Informatics_4_sem/SSH/src/client_keys/private.key", "rb");
     ret = Decrypt(encrypted_message, ret, &message, privKey_file);
-    if (ret == sizeof(unsigned))
+    if (ret == sizeof(int))
         memcpy(&B, message, ret);
     else {
         log_error("wrong size of message with B (part of symmetric key\n");
         exit(EXIT_FAILURE);
     }
-    return ((unsigned) powl(B, a)) % p;
+    return ((int) powl(B, a)) % p;
 }
 
 

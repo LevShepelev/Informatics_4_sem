@@ -279,28 +279,29 @@ int Decrypt(const char* info, int info_size, char** decrypted_info, FILE* privKe
 
 
 void Symmetric_encrypting(char* data, int size, int key) {
+    log_info("Symmetric_ecnrypting: size = %d, %s\n", size, data);
     for (int i = 0; i < size; i++)
-        data = data + key;
+        data[i] = data[i] + key;
 }
 
 
 void Symmetric_decrypting(char* data, int size, int key) {
     for (int i = 0; i < size; i++)
-        data = data - key;
+        data[i] = data[i] - key;
+    //log_info("Symmetric_decrypted size = %d: %s\n", size, data);
 }
 
 
 int Sendto_safe(int fd, const char* buf, size_t n, int flags, __CONST_SOCKADDR_ARG addr, socklen_t addr_len, int key) {
     char* buf_copy = Mycalloc(n, sizeof(char));
-    strcpy(buf_copy, buf);
+    strncpy(buf_copy, buf, n);
     Symmetric_encrypting(buf_copy, n, key);
     int ret = sendto(fd, buf_copy, n, flags, addr, addr_len);
     if (ret < 0) {
         log_perror("sendto\n");
         exit(EXIT_FAILURE);
     }
-    //free(buf_copy);
-    //if (errno) log_perror("sendto_safe\n");
+    free(buf_copy);
     return ret;
 }
 
@@ -329,15 +330,14 @@ int Read_safe(int fd, char* buf, size_t size, int key) {
 
 int Write_safe(int fd, const char* buf, size_t size, int key) {
     char* buf_copy = Mycalloc(size, sizeof(char));
-    strcpy(buf_copy, buf);
+    strncpy(buf_copy, buf, size);
     Symmetric_encrypting(buf_copy, size, key);
     int ret = write(fd, buf_copy, size);
     if (ret < 0) {
         log_perror("write\n");
         exit(EXIT_FAILURE);
     }
-    //free(buf_copy);
-    //if (errno) log_perror("write_safe\n");
+    free(buf_copy);
     return ret;
 }
 
