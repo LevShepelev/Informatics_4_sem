@@ -161,13 +161,16 @@ int UDP_communication(int socket_udp, struct sockaddr_in* client) {
                     log_perror("recvfrom\n");
                     exit(EXIT_FAILURE);
                 }
-
+                
                 if (rc > 0) {
                     if (write(fd[1], input_recv, rc) < 0) {
                         log_perror("write\n");
                         exit(EXIT_FAILURE);
                     }
-                
+                    if (strncmp(input_recv, SEND_FILE, strlen(SEND_FILE)) == 0) {
+                        log_info("sleep_send_file\n");
+                        sleep(1);
+                    }
                 }
             }
         }
@@ -434,8 +437,12 @@ int UDP_terminal_transmitting(struct pollfd fd_in[3], int fdm, int fd[2], int fd
                 log_perror("Error on read standard input\n");
                 return(1);
             }
-            if (Check_message_send_file(input, fd_in[0].fd, 1, (struct sockaddr_in*) client, key) == 1)
-                continue;
+            if (Check_message_send_file(input, socket_udp, 1, (struct sockaddr_in*) client, key) == 1) {
+                    Sendto_safe(socket_udp, "File was accepted\n", strlen("File was accepted\n"), 0, client, client_len, key);
+                    write(fdm, "\n", strlen("\n"));
+                    continue;
+                }
+
             if (strncmp(input, EXIT, strlen(EXIT)) == 0) {
                 log_info("client disconected\n");
                 return 0;
@@ -701,10 +708,12 @@ int Terminals_config(int* fdm, int* fds) {
 int Check_message_send_file(char* input, int socket, int is_udp, struct sockaddr_in* client, int key) {
     if (strncmp(input, SEND_FILE, strlen(SEND_FILE)) == 0) {
         char message[sizeof(READY_TO_ACCEPT)];
+        socklen_t client_len = sizeof(*client);
         int rc = 0;
         log_info("wait READY_TO_ACCEPT\n");
         if (is_udp) {
-            rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
+            rc = Recvfrom_safe(socket, message, strlen(READY_TO_ACCEPT), 0, client, &client_len, key);
+            //rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
         }
         else rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
         if (rc < 0) {
