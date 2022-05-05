@@ -14,7 +14,7 @@ int main()
     struct in_addr tmp;
     tmp.s_addr = htonl(INADDR_BROADCAST);
     server.sin_family = AF_INET;
-    server.sin_port   = htons(27312);
+    server.sin_port   = htons(27313);
     server.sin_addr   = tmp;
     char* buf = (char*) calloc(buf_size, sizeof(char));
     char* buf_receive = (char*) calloc(buf_size, sizeof(char));

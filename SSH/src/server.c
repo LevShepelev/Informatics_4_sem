@@ -16,13 +16,6 @@ int main() {
         log_perror("setsockopt");
         exit(EXIT_FAILURE);
     }
-    /*struct sockaddr_in tcp_server;
-
-    int socket_tcp = Socket_config(&tcp_server, tcp_port, SOCK_STREAM, SO_REUSEADDR, NEED_BIND, htonl(INADDR_ANY));
-    if (listen(socket_tcp, MAX_CLIENTS) < 0) {
-        log_perror("listen");
-        return 1;
-    }*/
 
     while (1){
         socklen_t client_len = sizeof(client);

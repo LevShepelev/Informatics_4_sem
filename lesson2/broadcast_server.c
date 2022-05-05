@@ -10,7 +10,7 @@ int main() {
     int buf_size = 1000, a = 1;
     struct sockaddr_in server;
     server.sin_family = AF_INET;
-    server.sin_port   = htons(27312);
+    server.sin_port   = htons(27313);
     server.sin_addr.s_addr   = htonl(INADDR_ANY);
     struct sockaddr_in client;
     char* buf = (char*) calloc(buf_size, sizeof(char));
