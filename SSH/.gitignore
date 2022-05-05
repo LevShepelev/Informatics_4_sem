@@ -8,3 +8,4 @@ old_version_server.c
 mylib.a
 libmylib.so
 keys_config
+file_1

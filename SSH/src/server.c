@@ -711,10 +711,8 @@ int Check_message_send_file(char* input, int socket, int is_udp, struct sockaddr
         socklen_t client_len = sizeof(*client);
         int rc = 0;
         log_info("wait READY_TO_ACCEPT\n");
-        if (is_udp) {
+        if (is_udp) 
             rc = Recvfrom_safe(socket, message, strlen(READY_TO_ACCEPT), 0, client, &client_len, key);
-            //rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
-        }
         else rc = Read_safe(socket, message, strlen(READY_TO_ACCEPT), key);
         if (rc < 0) {
             log_perror("read\n");
